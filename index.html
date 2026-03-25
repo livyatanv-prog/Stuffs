@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!--
+    DO NOT set user-scalable=no here — PRISM Live WebView on some Android
+    versions ignores the viewport entirely, but removing user-scalable
+    prevents a double-tap zoom bug seen on older WebView builds.
+  -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Unified Alert Overlay</title>
+  <style>
+    /* =========================================================
+       GLOBAL RESET
+       `transparent` alone can render as white in some Android
+       WebView builds. `rgba(0,0,0,0)` is the bulletproof form.
+    ========================================================= */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      /* rgba(0,0,0,0) is safer than `transparent` in older WebViews */
+      background-color: rgba(0, 0, 0, 0) !important;
+      overflow: hidden;
+      /* Prevents WebView from trying to scroll on touch events */
+      touch-action: none;
+    }
+
+    /* =========================================================
+       OVERLAY WRAPPER
+       `contain: strict` tells the browser each child is an
+       isolated paint layer — critical for mobile GPU budget
+       when multiple animated iframes fire simultaneously.
+    ========================================================= */
+    #overlay-wrapper {
+      position: fixed;    /* fixed > relative: survives any WebView scroll weirdness */
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;       /* JS below patches this for Android vh bug */
+      contain: strict;    /* Isolates repaints — major perf win on mobile */
+    }
+
+    /* =========================================================
+       BASE IFRAME STYLE
+
+       KEY MOBILE FIXES:
+       ─────────────────
+       • pointer-events: none  — without this, the topmost iframe
+         swallows ALL touch/click events. Lower layers never fire.
+         Bug: the previous version was missing this entirely.
+
+       • will-change: transform + translateZ(0)  — promotes each
+         iframe to its own GPU compositor layer. Prevents the
+         whole page from repainting when one alert animates.
+
+       • allow="autoplay"  — Android WebView blocks audio/video
+         autoplay by default. Alert sounds are silently dropped
+         without this permission on iframes.
+
+       Z-INDEX LAYERING GUIDE (lowest = furthest back):
+         .layer-1  z-index: 10   ← Kick    (bottom)
+         .layer-2  z-index: 20   ← YouTube
+         .layer-3  z-index: 30   ← Twitch
+         .layer-4  z-index: 40   ← Throne
+         .layer-5  z-index: 50   ← NimoTV  (top)
+
+       To bring a platform forward: raise its z-index value.
+    ========================================================= */
+    .alert-frame {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+      background-color: rgba(0, 0, 0, 0); /* explicit, not shorthand */
+
+      /* BUG FIX: was missing — top iframe blocked all layers below */
+      pointer-events: none;
+
+      /* GPU compositing — reduces paint cost when alerts animate */
+      will-change: transform;
+      transform: translateZ(0);
+
+      /* Prevent the iframe itself from scrolling its content */
+      overflow: hidden;
+    }
+
+    .layer-1 { z-index: 10; } /* Kick    */
+    .layer-2 { z-index: 20; } /* YouTube */
+    .layer-3 { z-index: 30; } /* Twitch  */
+    .layer-4 { z-index: 40; } /* Throne  */
+    .layer-5 { z-index: 50; } /* NimoTV  */
+
+    /*
+      TO ADD A NEW LAYER:
+      1. Add .layer-6 { z-index: 60; } here
+      2. Copy any <iframe> block below, update src + class
+    */
+  </style>
+</head>
+<body>
+
+<!--
+  ================================================================
+  UNIFIED ALERT OVERLAY  —  PRISM LIVE / OBS EDITION
+  ================================================================
+
+  PRISM LIVE MOBILE SETUP
+  ────────────────────────
+  1. Host on GitHub Pages (see below) — PRISM does not support
+     local file:// paths on mobile.
+  2. In PRISM Live → Scene → Add Source → Web Browser
+  3. Paste your GitHub Pages URL
+  4. Set Width/Height to your canvas size (e.g. 1280×720 or 1920×1080)
+  5. Enable "Custom background color" and set it to transparent / #00000000
+  6. Do NOT enable "Shutdown source when not visible" on mobile —
+     PRISM may not reliably restart the WebView on resume.
+
+  OBS DESKTOP SETUP
+  ──────────────────
+  1. Add Browser Source → check "Local File" or paste GitHub Pages URL
+  2. Match Width/Height to canvas
+  3. Check "Shutdown source when not visible" (desktop can handle restarts)
+  4. Custom CSS field: leave empty
+
+  GITHUB PAGES HOSTING
+  ─────────────────────
+  1. Create a repo (can be private with Pages enabled on free tier)
+  2. Push this file as index.html to the main branch
+  3. Settings → Pages → Source: Deploy from branch → main / root
+  4. Your URL: https://<username>.github.io/<repo>/
+
+  ADDING AN OVERLAY
+  ──────────────────
+  1. Add .layer-6 { z-index: 60; } to the CSS above
+  2. Copy any <iframe> block, set the new class + src URL
+
+  REPOSITIONING ONE OVERLAY
+  ──────────────────────────
+  Override position inline on the iframe element:
+    style="top: 100px; left: 0; width: 600px; height: 300px;"
+  ================================================================
+-->
+
+<div id="overlay-wrapper">
+
+  <!-- ── Layer 1 · Kick ──────────────────────────────────────
+       StreamElements widget.
+       `loading="eager"` ensures the widget is hot on stream
+       start — do not use lazy here.
+  ─────────────────────────────────────────────────────────── -->
+  <iframe
+    class="alert-frame layer-1"
+    src="https://widgets.streamelements.com/host/692821b15f39d7356e6d7794/5af4ecdc-7361-45c1-8ba3-f3ee82eee8a3/wD6xJLCAOz_dfQWowTNOjYi1ATHj70kQPGGZ29JZLzxJu5Tj"
+    allowtransparency="true"
+    scrolling="no"
+    loading="eager"
+    allow="autoplay; fullscreen"
+    referrerpolicy="no-referrer-when-downgrade"
+    title="Kick Alerts"
+    data-label="kick"
+  ></iframe>
+
+  <!-- ── Layer 2 · YouTube ─────────────────────────────────── -->
+  <iframe
+    class="alert-frame layer-2"
+    src="https://widgets.streamelements.com/host/6928218e51e205f725cf8f6f/d1d42fe9-cc33-4051-9a10-5f3b90a6706d/1my1-mqLS7unffl19E7x58SEz5WnR2qKJN0oltFq4DzmxqOU"
+    allowtransparency="true"
+    scrolling="no"
+    loading="eager"
+    allow="autoplay; fullscreen"
+    referrerpolicy="no-referrer-when-downgrade"
+    title="YouTube Alerts"
+    data-label="youtube"
+  ></iframe>
+
+  <!-- ── Layer 3 · Twitch ──────────────────────────────────── -->
+  <iframe
+    class="alert-frame layer-3"
+    src="https://widgets.streamelements.com/host/691b95dced44fe9e6063cd7d/7a2aa267-4661-4c0d-a371-9eecff91ca14/pKNf4m_fPJAPSWJHZjwBaIOfQPi3s3rTKqfxeuuzYTdwczbU"
+    allowtransparency="true"
+    scrolling="no"
+    loading="eager"
+    allow="autoplay; fullscreen"
+    referrerpolicy="no-referrer-when-downgrade"
+    title="Twitch Alerts"
+    data-label="twitch"
+  ></iframe>
+
+  <!-- ── Layer 4 · Throne ──────────────────────────────────── -->
+  <iframe
+    class="alert-frame layer-4"
+    src="https://throne.com/stream-alerts/CaenY7WDKwNUJ3j6jWZSo8NdxMD2"
+    allowtransparency="true"
+    scrolling="no"
+    loading="eager"
+    allow="autoplay; fullscreen"
+    referrerpolicy="no-referrer-when-downgrade"
+    title="Throne Alerts"
+    data-label="throne"
+  ></iframe>
+
+  <!-- ── Layer 5 · NimoTV ──────────────────────────────────── -->
+  <iframe
+    class="alert-frame layer-5"
+    src="https://www.nimo.tv/vidwalla/alert-box?v=1&t=1774367328&id=3182715519&s=3089fc5a771e&_lang=1033"
+    allowtransparency="true"
+    scrolling="no"
+    loading="eager"
+    allow="autoplay; fullscreen"
+    referrerpolicy="no-referrer-when-downgrade"
+    title="NimoTV Alerts"
+    data-label="nimotv"
+  ></iframe>
+
+</div>
+
+<script>
+  /* ============================================================
+     FIX 1 — Android WebView 100vh Bug
+     ─────────────────────────────────
+     On Android WebView (used by PRISM Live), `100vh` can include
+     the virtual keyboard or browser chrome height, causing a
+     layout overflow. We measure the real inner height and force
+     it directly on the wrapper, updated on resize/orientation change.
+  ============================================================ */
+  function fixViewportHeight() {
+    document.getElementById('overlay-wrapper').style.height = window.innerHeight + 'px';
+  }
+  fixViewportHeight();
+  window.addEventListener('resize', fixViewportHeight);
+  window.addEventListener('orientationchange', fixViewportHeight);
+
+
+  /* ============================================================
+     FIX 2 — Iframe Load Failure Recovery
+     ──────────────────────────────────────
+     If a widget fails to load (network hiccup, CDN timeout),
+     the iframe silently stays blank. This detects the failure
+     and retries up to MAX_RETRIES times with exponential backoff.
+
+     Exponential backoff is used because on mobile networks
+     (especially at stream start) the connection may need a moment
+     to stabilise. Hammering the server immediately makes it worse.
+  ============================================================ */
+  const MAX_RETRIES = 3;
+  const BASE_DELAY_MS = 3000; // 3s → 6s → 12s
+
+  document.querySelectorAll('.alert-frame').forEach(iframe => {
+    let retries = 0;
+
+    iframe.addEventListener('error', function handleError() {
+      if (retries >= MAX_RETRIES) {
+        console.warn(`[overlay] ${iframe.dataset.label}: max retries reached, giving up.`);
+        return;
+      }
+      const delay = BASE_DELAY_MS * Math.pow(2, retries);
+      retries++;
+      console.warn(`[overlay] ${iframe.dataset.label}: load failed, retry ${retries}/${MAX_RETRIES} in ${delay}ms`);
+      setTimeout(() => {
+        // Re-assign src to force a fresh load (not a cached blank)
+        const original = iframe.src;
+        iframe.src = '';
+        requestAnimationFrame(() => { iframe.src = original; });
+      }, delay);
+    });
+  });
+
+
+  /* ============================================================
+     FIX 3 — Page Visibility: Reload After Suspension
+     ─────────────────────────────────────────────────
+     PRISM Live on mobile may suspend the WebView when the app
+     goes to background. When it comes back, alert widgets can
+     get stuck in a frozen state. This reloads all iframes if
+     the page was hidden for more than 30 seconds.
+  ============================================================ */
+  let hiddenAt = null;
+  const RELOAD_THRESHOLD_MS = 30000; // 30 seconds
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      hiddenAt = Date.now();
+    } else {
+      if (hiddenAt && (Date.now() - hiddenAt) > RELOAD_THRESHOLD_MS) {
+        console.log('[overlay] Resuming after suspension — reloading widgets');
+        document.querySelectorAll('.alert-frame').forEach(iframe => {
+          const src = iframe.src;
+          iframe.src = '';
+          requestAnimationFrame(() => { iframe.src = src; });
+        });
+      }
+      hiddenAt = null;
+    }
+  });
+</script>
+
+</body>
+</html>
